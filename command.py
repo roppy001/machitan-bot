@@ -12,10 +12,13 @@ import tweepy
 import common
 import asyncio
 
-client = discord.Client()
+LOOP_INTERVAL_TIME = 10
+
 BOT_TOKEN=os.getenv('MACHITAN_BOT_TOKEN')
 GUILD_ID=os.getenv('MACHITAN_BOT_GUILD')
 CHANNEL_ID=os.getenv('MACHITAN_BOT_CHANNEL')
+
+client = discord.Client()
 
 data = {}
 
@@ -42,7 +45,7 @@ async def detection_loop():
     channel = await client.fetch_channel(CHANNEL_ID)
     await channel.send('てすとてすと');
 
-    await asyncio.sleep(5)
+    await asyncio.sleep(LOOP_INTERVAL_TIME)
     asyncio.ensure_future(detection_loop())
     return
 
