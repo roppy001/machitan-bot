@@ -48,8 +48,10 @@ async def on_ready():
     return
 
 # 発言時に実行されるイベントハンドラを定義
-#@client.event
-#async def on_message(message):
+@client.event
+async def on_message(message):
+    if message.content == '.shutdown':
+        await client.logout()
 
 async def detection_loop():
     print(f'Detection start {datetime.datetime.now()}')
