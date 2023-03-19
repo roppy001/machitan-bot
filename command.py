@@ -6,6 +6,7 @@ import datetime
 
 # 追加インストール
 import discord
+from discord.ext import tasks
 import tweepy
 
 # BOT関連
@@ -23,37 +24,15 @@ ACCESS_TOKEN=os.getenv('MACHITAN_BOT_ACCESS_TOKEN')
 ACCESS_TOKEN_SECRET=os.getenv('MACHITAN_BOT_ACCESS_TOKEN_SECRET')
 ROLE_ID=os.getenv('MACHITAN_BOT_ROLE_ID')
 QUERY_STR=os.getenv('MACHITAN_BOT_QUERY')
-
-client = discord.Client()
+# ループ間隔 デフォルトは10分
+LOOP_INTERVAL=os.getenv('MACHITAN_LOOP_INTERVAL', 600)
 
 tweet_auth = tweepy.OAuthHandler(CUNSUMER_KEY, CUNSUMER_SECRET)
 tweet_auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 tweet_api = tweepy.API(tweet_auth)
 
-# 起動時に動作する処理
-@client.event
-async def on_ready():
-    # 起動したらターミナルにログイン通知が表示される
-    print('ログインしました')
-    
-    guild = await client.fetch_guild(GUILD_ID)
-    roles = await guild.fetch_roles()
 
-    print('ロール一覧')
-    for role in roles:
-        print(f'id={role.id}, name={role.name}')
-
-
-    asyncio.ensure_future(detection_loop())
-    return
-
-# 発言時に実行されるイベントハンドラを定義
-@client.event
-async def on_message(message):
-    if message.content == '.shutdown':
-        await client.logout()
-
-async def detection_loop():
+async def main_loop():
     print(f'Detection start {datetime.datetime.now()}')
 
     guild = await client.fetch_guild(GUILD_ID)
@@ -72,7 +51,7 @@ async def detection_loop():
         latest_status_id = data[common.LATEST_STATUS_ID_KEY]
 
 
-    tweets = tweepy.Cursor( tweet_api.search, q=QUERY_STR, since_id=latest_status_id, tweet_mode='extended', result_type="mixed", include_entities=True).items(20)
+    tweets = tweepy.Cursor( tweet_api.search_tweets, q=QUERY_STR, since_id=latest_status_id, tweet_mode='extended', result_type="mixed", include_entities=True).items(20)
 
     strs = []
 
@@ -94,11 +73,38 @@ async def detection_loop():
     common.save_data(data)
 
     print(f'Detection end {datetime.datetime.now()}')
-
-    await asyncio.sleep(LOOP_INTERVAL_TIME)
-    asyncio.ensure_future(detection_loop())
     return
 
+class MainClient(discord.Client):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    async def setup_hook(self) -> None:
+        self.background_task.start()
+
+    async def on_ready(self):
+        print(f'Logged in as {self.user} (ID: {self.user.id})')
+        #guild = await client.fetch_guild(GUILD_ID)
+        #roles = await guild.fetch_roles()
+
+        #print('ロール一覧')
+        #for role in roles:
+        #    print(f'id={role.id}, name={role.name}')
+
+    @tasks.loop(seconds=LOOP_INTERVAL)  # task runs every 60 seconds
+    async def background_task(self):
+        await main_loop()
+
+    async def before_my_task(self):
+        await self.wait_until_ready()  # wait until the bot logs in
+
+    async def on_message(self, message):
+        if message.content == '.shutdown':
+            await client.close()
+
 # Botの起動とDiscordサーバーへの接続
+its = discord.Intents.default()
+its.message_content = True
+client = MainClient(intents=its)
 client.run(BOT_TOKEN)
 
